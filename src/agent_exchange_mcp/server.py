@@ -1,26 +1,19 @@
 """MCP server that lets a client talk to other AI models (Anthropic, OpenAI, xAI, ...)."""
 
 import uuid
-from dataclasses import dataclass, field
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
 from . import providers
 from .config import Config, load_config
+from .store import Conversation, Store
 
 mcp = FastMCP("agent-exchange")
 _config: Config | None = None
 
 
-@dataclass
-class Conversation:
-    system: str | None = None
-    messages: list[dict[str, str]] = field(default_factory=list)
-
-
-# In-memory only: conversations last as long as the server process.
-_conversations: dict[str, Conversation] = {}
+_store: Store | None = None
 
 
 def _cfg() -> Config:
@@ -28,6 +21,13 @@ def _cfg() -> Config:
     if _config is None:
         _config = load_config()
     return _config
+
+
+def _conversations() -> Store:
+    global _store
+    if _store is None:
+        _store = Store(_cfg().data_dir)
+    return _store
 
 
 @mcp.tool()
@@ -43,7 +43,7 @@ def chat(
     """Send a message to another AI model and get its reply.
 
     Omit conversation_id to start a new conversation; pass the returned
-    conversation_id to continue it (history is kept, and you may switch
+    conversation_id to continue it (history is saved to disk, and you may switch
     provider between turns).
 
     Args:
@@ -61,19 +61,19 @@ def chat(
         raise ValueError(f"Unknown provider '{name}'. Available: {sorted(cfg.providers)}")
     p = cfg.providers[name]
 
+    store = _conversations()
     if conversation_id:
-        if conversation_id not in _conversations:
-            raise ValueError(f"Unknown conversation_id '{conversation_id}'")
-        convo = _conversations[conversation_id]
+        convo = store.load(conversation_id)
     else:
         conversation_id = uuid.uuid4().hex[:12]
-        convo = _conversations[conversation_id] = Conversation(system=system)
+        convo = Conversation(system=system)
 
     used_model = model or p.model
     history = convo.messages + [{"role": "user", "content": message}]
     reply = providers.complete(p, used_model, convo.system, history, max_tokens, effort)
     # Only commit the turn once the call succeeded, so failures leave history intact.
     convo.messages = history + [{"role": "assistant", "content": reply}]
+    store.save(conversation_id, convo)
     return {"conversation_id": conversation_id, "provider": name, "model": used_model, "reply": reply}
 
 
@@ -91,17 +91,18 @@ def list_providers() -> list[dict]:
 @mcp.tool()
 def list_conversations() -> list[dict]:
     """List active conversations (id, turn count, system prompt)."""
-    return [
-        {"conversation_id": cid, "turns": len(c.messages) // 2, "system": c.system}
-        for cid, c in _conversations.items()
-    ]
+    store = _conversations()
+    out = []
+    for cid in store.list_ids():
+        c = store.load(cid)
+        out.append({"conversation_id": cid, "turns": len(c.messages) // 2, "system": c.system})
+    return out
 
 
 @mcp.tool()
 def reset_conversation(conversation_id: str) -> str:
     """Delete a conversation and its history."""
-    if _conversations.pop(conversation_id, None) is None:
-        raise ValueError(f"Unknown conversation_id '{conversation_id}'")
+    _conversations().delete(conversation_id)
     return "deleted"
 
 

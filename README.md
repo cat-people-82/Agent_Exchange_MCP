@@ -41,17 +41,23 @@ Claude Code:
 claude mcp add agent-exchange -- agent-exchange-mcp
 ```
 
-Claude Desktop (`claude_desktop_config.json`):
+Claude Desktop — edit `claude_desktop_config.json` (Settings → Developer → Edit Config). `command` must be an **executable** (not the path to `server.py`), so point it at the Python interpreter of the environment where you ran `pip install -e .` and run the package as a module:
 
 ```json
 {
   "mcpServers": {
-    "agent-exchange": { "command": "agent-exchange-mcp" }
+    "agent-exchange": {
+      "command": "/absolute/path/to/Agent_Exchange_MCP/.venv/bin/python",
+      "args": ["-m", "agent_exchange_mcp"]
+    }
   }
 }
 ```
 
-Use the full path to the `agent-exchange-mcp` executable if it isn't on the client's `PATH` (e.g. when installed in a virtualenv). Keys are picked up from the project's `.env`, or you can pass them via the client's `env` setting.
+Tips:
+- Create the environment first: `python3 -m venv .venv && .venv/bin/pip install -e .` (find an existing interpreter's path with `which python` while its environment is active).
+- Claude Desktop doesn't inherit your shell environment; keys are read from the project's `.env`, or pass them via an `"env": { "ANTHROPIC_API_KEY": "..." }` entry.
+- Fully quit and reopen Claude Desktop after editing the config. Logs are in `~/Library/Logs/Claude/mcp-server-agent-exchange.log`.
 
 ## Tools
 

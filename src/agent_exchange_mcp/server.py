@@ -1,9 +1,11 @@
 """MCP server that lets a client talk to other AI models (Anthropic, OpenAI, xAI, ...)."""
 
+import asyncio
 import uuid
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from pydantic import Field, create_model
 
 from . import providers
 from .config import Config, load_config
@@ -30,11 +32,36 @@ def _conversations() -> Store:
     return _store
 
 
+ProviderName = Literal["anthropic", "openai", "xai"]  # shown as a choice list by clients
+
+
+async def _pick_provider(ctx: Context, cfg: Config) -> str:
+    """Resolve the provider for a new conversation, asking the user via the client UI."""
+    ready = [n for n, p in cfg.providers.items() if p.api_key]
+    if len(ready) <= 1:
+        return cfg.default_provider
+    choice = create_model(
+        "ProviderChoice",
+        provider=(
+            Literal[tuple(ready)],  # type: ignore[valid-type]
+            Field(description="Which AI provider should answer?"),
+        ),
+    )
+    try:
+        result = await ctx.elicit("Which AI provider should answer this conversation?", choice)
+    except Exception:
+        return cfg.default_provider  # client doesn't support elicitation
+    if result.action != "accept":
+        raise ValueError("Provider selection was declined or cancelled.")
+    return result.data.provider
+
+
 @mcp.tool()
-def chat(
+async def chat(
     message: str,
+    ctx: Context,
     conversation_id: str | None = None,
-    provider: str | None = None,
+    provider: ProviderName | None = None,
     model: str | None = None,
     system: str | None = None,
     max_tokens: int = 16000,
@@ -49,18 +76,14 @@ def chat(
     Args:
         message: The user message.
         conversation_id: Continue an existing conversation.
-        provider: Provider name (see list_providers); defaults to the configured default.
+        provider: Provider to use. If omitted: a continued conversation keeps its last
+            provider; a new one asks the user to choose (via the client UI when supported).
         model: Model ID override for this turn.
         system: System prompt (only applied when starting a conversation).
         max_tokens: Maximum tokens in the reply.
         effort: Thinking effort (Anthropic only; ignored by other providers).
     """
     cfg = _cfg()
-    name = provider or cfg.default_provider
-    if name not in cfg.providers:
-        raise ValueError(f"Unknown provider '{name}'. Available: {sorted(cfg.providers)}")
-    p = cfg.providers[name]
-
     store = _conversations()
     if conversation_id:
         convo = store.load(conversation_id)
@@ -68,11 +91,19 @@ def chat(
         conversation_id = uuid.uuid4().hex[:12]
         convo = Conversation(system=system)
 
+    name = provider or convo.provider or await _pick_provider(ctx, cfg)
+    if name not in cfg.providers:
+        raise ValueError(f"Unknown provider '{name}'. Available: {sorted(cfg.providers)}")
+    p = cfg.providers[name]
+
     used_model = model or p.model
     history = convo.messages + [{"role": "user", "content": message}]
-    reply = providers.complete(p, used_model, convo.system, history, max_tokens, effort)
+    reply = await asyncio.to_thread(
+        providers.complete, p, used_model, convo.system, history, max_tokens, effort
+    )
     # Only commit the turn once the call succeeded, so failures leave history intact.
     convo.messages = history + [{"role": "assistant", "content": reply}]
+    convo.provider = name
     store.save(conversation_id, convo)
     return {"conversation_id": conversation_id, "provider": name, "model": used_model, "reply": reply}
 

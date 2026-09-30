@@ -4,7 +4,7 @@ An [MCP](https://modelcontextprotocol.io) server that lets an AI client (Claude 
 
 ## Features
 
-- **Multiple providers** — Anthropic (Claude), OpenAI, xAI (Grok). Switch provider per call, even mid-conversation.
+- **Multiple providers** — Anthropic (Claude), OpenAI, xAI (Grok). Choose the provider from the client UI, and switch it per call, even mid-conversation.
 - **Multi-turn conversations** — history is kept per `conversation_id`.
 - **Persistent** — each conversation is a JSON file on disk and survives server restarts.
 - **Simple config** — API keys and models live in a `.env` file.
@@ -26,13 +26,12 @@ Settings are read from `.env` in the project root (or the current directory, or 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AGENT_EXCHANGE_PROVIDER` | `anthropic` | Provider used when `chat` gets no `provider` (`anthropic`, `openai`, `xai`) |
 | `AGENT_EXCHANGE_DATA_DIR` | `~/.local/share/agent-exchange/conversations` | Where conversations are saved |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | – / `claude-opus-5-5` | Anthropic credentials and default model |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL` | – / `gpt-5` / OpenAI | OpenAI settings |
 | `XAI_API_KEY` / `XAI_MODEL` / `XAI_BASE_URL` | – / `grok-4` / `https://api.x.ai/v1` | xAI settings |
 
-You only need keys for the providers you use. Adjust the default OpenAI/xAI model IDs to whatever your account offers.
+Provider selection is *not* configured here — it happens in the client (see below). `.env` only holds API keys, models and the data directory. You only need keys for the providers you use. Adjust the default OpenAI/xAI model IDs to whatever your account offers.
 
 ## Register with an MCP client
 
@@ -66,6 +65,15 @@ Use the full path to the `agent-exchange-mcp` executable if it isn't on the clie
 `chat` returns `{conversation_id, provider, model, reply}`.
 
 Example flow: ask Claude a question, then continue the same conversation with `provider: "xai"` to get Grok's take with the full history.
+
+## Choosing a provider
+
+The provider is picked in your MCP client, not in config:
+
+- `chat` has a `provider` parameter (`anthropic` | `openai` | `xai`), which clients show as a choice list and which the calling model or you can set.
+- If it is omitted when **starting** a conversation and more than one provider has an API key, the server asks you to choose through the client's prompt (MCP *elicitation*, supported by clients such as Claude Code).
+- If the client doesn't support elicitation, or only one provider has a key, the first provider with a key is used.
+- A **continued** conversation keeps its last provider unless you pass a different one.
 
 ## Storage
 

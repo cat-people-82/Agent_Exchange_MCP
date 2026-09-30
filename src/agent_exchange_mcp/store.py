@@ -12,6 +12,7 @@ _ID_RE = re.compile(r"^[0-9a-f]{12}$")
 @dataclass
 class Conversation:
     system: str | None = None
+    provider: str | None = None  # last provider used; default for the next turn
     messages: list[dict[str, str]] = field(default_factory=list)
 
 

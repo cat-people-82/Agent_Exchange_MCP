@@ -51,11 +51,8 @@ def load_config() -> Config:
             base_url=os.environ.get(f"{prefix}_BASE_URL") or spec["base_url"],
         )
 
-    default = os.environ.get("AGENT_EXCHANGE_PROVIDER") or "anthropic"
-    if default not in providers:
-        raise ValueError(
-            f"AGENT_EXCHANGE_PROVIDER '{default}' is not one of {sorted(providers)}"
-        )
+    # Fallback when the client doesn't pick a provider: the first one with a key.
+    default = next((n for n, p in providers.items() if p.api_key), "anthropic")
     data_dir = Path(
         os.environ.get("AGENT_EXCHANGE_DATA_DIR")
         or Path.home() / ".local" / "share" / "agent-exchange" / "conversations"

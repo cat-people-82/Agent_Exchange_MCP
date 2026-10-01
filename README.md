@@ -29,6 +29,7 @@ Settings are read from `.env` in the project root (or the current directory, or 
 | `AGENT_EXCHANGE_DATA_DIR` | `~/.local/share/agent-exchange/conversations` | Where conversations are saved |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | – / `claude-opus-5-5` | Anthropic credentials and default model |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL` | – / `gpt-5` / OpenAI | OpenAI settings |
+| `AGENT_EXCHANGE_IGNORE_PROXY` | off | Set `true` to make API calls ignore `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY` (see Troubleshooting) |
 | `XAI_API_KEY` / `XAI_MODEL` / `XAI_BASE_URL` | – / `grok-4` / `https://api.x.ai/v1` | xAI settings |
 
 Provider selection is *not* configured here — it happens in the client (see below). `.env` only holds API keys, models and the data directory. You only need keys for the providers you use. Adjust the default OpenAI/xAI model IDs to whatever your account offers.
@@ -65,6 +66,7 @@ Tips:
 |---|---|
 | `chat(message, conversation_id?, provider?, model?, system?, max_tokens?, effort?)` | Send a message and get the reply. Omit `conversation_id` to start a new conversation; pass the returned id to continue it. `system` applies only when starting a conversation. `effort` (`low`…`max`) applies to Anthropic only. |
 | `list_providers()` | Configured providers, default models, and whether a key is set. |
+| `server_info()` | Diagnose config: which `.env` files were checked/found, data dir, and which providers have a key. |
 | `list_conversations()` | Saved conversations (id, turns, system prompt). |
 | `reset_conversation(conversation_id)` | Delete a conversation. |
 
@@ -84,6 +86,14 @@ The provider is picked in your MCP client, not in config:
 ## Storage
 
 Conversations are stored as `<conversation_id>.json` (system prompt + message list) in the data directory. Files are plain text and contain your prompts and replies, so protect the directory accordingly. Delete a conversation with `reset_conversation` or by removing its file.
+
+## Troubleshooting
+
+- **`has_api_key: false`** — call `server_info` to see which `.env` files were checked. Sandboxed clients may not let the server read the project folder; set the keys in the client's environment-variable settings instead. Config is read at startup, so reconnect after changes.
+- **`Could not reach the <provider> API: Connection error`** — the client app may export proxy variables (`ALL_PROXY`, `HTTPS_PROXY`) that point at a proxy this process can't reach. `server_info` shows them under `proxy_env`. If the machine can reach the API directly, set `AGENT_EXCHANGE_IGNORE_PROXY=true`.
+- **`Using SOCKS proxy, but 'socksio' is not installed`** — reinstall (`pip install -e .`); `socksio` is a dependency.
+- **`SSLCertVerificationError: ('OSStatus -26276',)`** (macOS) — the SDK default client verifies through the OS trust store (httpx 2.x uses `truststore`, which calls the Security framework) and that can fail even for a valid public certificate. Both client factories therefore verify against `certifi`; override with `AGENT_EXCHANGE_CA_BUNDLE` if you sit behind a TLS-terminating proxy whose CA is not in certifi.
+- **A sandboxed client may offer no direct egress.** If `AGENT_EXCHANGE_IGNORE_PROXY=true` produces `nodename nor servname provided`, the proxy is the only route out — leave the flag off. Where `ALL_PROXY` is SOCKS but only the HTTP proxy serves, the server rewrites the catch-all to the HTTP proxy at startup and reports it as `socks_fallback` in `server_info`; disable with `AGENT_EXCHANGE_SOCKS_FALLBACK=false`.
 
 ## Notes
 

@@ -3,7 +3,7 @@ name = "agent-exchange-mcp"
 version = "0.1.0"
 description = "MCP server that lets an AI client call Claude via the Anthropic API"
 requires-python = ">=3.11"
-dependencies = ["mcp>=1.2,<2", "anthropic>=0.40", "openai>=1.50", "python-dotenv>=1.0"]
+dependencies = ["mcp>=1.2,<2", "anthropic>=0.40", "openai>=1.50", "python-dotenv>=1.0", "socksio>=1.0"]
 
 [project.scripts]
 agent-exchange-mcp = "agent_exchange_mcp.server:main"

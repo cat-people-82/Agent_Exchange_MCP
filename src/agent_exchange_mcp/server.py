@@ -1,6 +1,8 @@
 """MCP server that lets a client talk to other AI models (Anthropic, OpenAI, xAI, ...)."""
 
 import asyncio
+import os
+import re
 import uuid
 from typing import Literal
 
@@ -99,7 +101,8 @@ async def chat(
     used_model = model or p.model
     history = convo.messages + [{"role": "user", "content": message}]
     reply = await asyncio.to_thread(
-        providers.complete, p, used_model, convo.system, history, max_tokens, effort
+        providers.complete, p, used_model, convo.system, history, max_tokens, effort,
+        cfg.ignore_proxy,
     )
     # Only commit the turn once the call succeeded, so failures leave history intact.
     convo.messages = history + [{"role": "assistant", "content": reply}]
@@ -117,6 +120,34 @@ def list_providers() -> list[dict]:
          "has_api_key": bool(p.api_key), "default": n == cfg.default_provider}
         for n, p in cfg.providers.items()
     ]
+
+
+def _proxy_env() -> dict[str, str]:
+    """Proxy variables in the server's environment, with any credentials removed."""
+    out = {}
+    for name in ("ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"):
+        for key in (name, name.lower()):
+            if value := os.environ.get(key):
+                out[key] = re.sub(r"//[^/@]*@", "//***@", value)
+    return out
+
+
+@mcp.tool()
+def server_info() -> dict:
+    """Diagnose configuration: which .env files were checked, data dir, and key status."""
+    cfg = _cfg()
+    return {
+        "env_files_checked": [{"path": p, "found": f} for p, f in cfg.env_files],
+        "data_dir": str(cfg.data_dir),
+        "providers": {
+            n: {"has_api_key": bool(p.api_key), "key_variable": f"{n.upper()}_API_KEY"}
+            for n, p in cfg.providers.items()
+        },
+        "ignore_proxy": cfg.ignore_proxy,
+        "socks_fallback": cfg.socks_fallback,
+        "proxy_env": _proxy_env(),
+        "note": "Config is read once at startup; reconnect the server after editing .env.",
+    }
 
 
 @mcp.tool()

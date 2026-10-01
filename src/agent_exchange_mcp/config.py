@@ -32,6 +32,7 @@ class Config:
     providers: dict[str, Provider]
     data_dir: Path
     env_files: list[tuple[str, bool]]  # (.env path checked, found?)
+    ignore_proxy: bool = False
 
 
 def load_config() -> Config:
@@ -65,4 +66,8 @@ def load_config() -> Config:
         os.environ.get("AGENT_EXCHANGE_DATA_DIR")
         or Path.home() / ".local" / "share" / "agent-exchange" / "conversations"
     ).expanduser()
-    return Config(default_provider=default, providers=providers, data_dir=data_dir, env_files=env_files)
+    return Config(default_provider=default, providers=providers, data_dir=data_dir,
+        env_files=env_files,
+        ignore_proxy=os.environ.get("AGENT_EXCHANGE_IGNORE_PROXY", "").lower()
+        in ("1", "true", "yes"),
+    )

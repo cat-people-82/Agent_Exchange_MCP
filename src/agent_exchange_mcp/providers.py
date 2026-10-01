@@ -12,8 +12,19 @@ class ProviderError(RuntimeError):
     pass
 
 
+def _anthropic_client(p: Provider, ignore_proxy: bool) -> anthropic.Anthropic:
+    # trust_env=False makes the HTTP client ignore ALL_PROXY/HTTPS_PROXY/etc.
+    http = anthropic.DefaultHttpxClient(trust_env=False) if ignore_proxy else None
+    return anthropic.Anthropic(api_key=p.api_key, base_url=p.base_url, http_client=http)
+
+
+def _openai_client(p: Provider, ignore_proxy: bool) -> openai.OpenAI:
+    http = openai.DefaultHttpxClient(trust_env=False) if ignore_proxy else None
+    return openai.OpenAI(api_key=p.api_key, base_url=p.base_url, http_client=http)
+
+
 def complete(p: Provider, model: str, system: str | None, messages: Messages,
-             max_tokens: int, effort: str) -> str:
+             max_tokens: int, effort: str, ignore_proxy: bool = False) -> str:
     if not p.api_key:
         raise ProviderError(
             f"No API key for provider '{p.name}'. Set {p.name.upper()}_API_KEY in "
@@ -21,16 +32,16 @@ def complete(p: Provider, model: str, system: str | None, messages: Messages,
             "the server (config is read at startup). Call server_info to see where it looked."
         )
     if p.kind == "anthropic":
-        return _anthropic(p, model, system, messages, max_tokens, effort)
+        return _anthropic(p, model, system, messages, max_tokens, effort, ignore_proxy)
     if p.kind == "openai":
-        return _openai(p, model, system, messages, max_tokens)
+        return _openai(p, model, system, messages, max_tokens, ignore_proxy)
     raise ProviderError(f"Unknown provider kind '{p.kind}'")
 
 
-def _anthropic(p, model, system, messages, max_tokens, effort) -> str:
+def _anthropic(p, model, system, messages, max_tokens, effort, ignore_proxy) -> str:
     kwargs = {"system": system} if system else {}
     try:
-        with anthropic.Anthropic(api_key=p.api_key, base_url=p.base_url).messages.stream(
+        with _anthropic_client(p, ignore_proxy).messages.stream(
             model=model,
             max_tokens=max_tokens,
             thinking={"type": "adaptive"},
@@ -54,12 +65,12 @@ def _anthropic(p, model, system, messages, max_tokens, effort) -> str:
     return text
 
 
-def _openai(p, model, system, messages, max_tokens) -> str:
+def _openai(p, model, system, messages, max_tokens, ignore_proxy) -> str:
     msgs = ([{"role": "system", "content": system}] if system else []) + messages
     # OpenAI proper wants max_completion_tokens; other compatible APIs (xAI) use max_tokens.
     limit = "max_completion_tokens" if p.name == "openai" else "max_tokens"
     try:
-        resp = openai.OpenAI(api_key=p.api_key, base_url=p.base_url).chat.completions.create(
+        resp = _openai_client(p, ignore_proxy).chat.completions.create(
             model=model, messages=msgs, **{limit: max_tokens}
         )
     except openai.RateLimitError:

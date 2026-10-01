@@ -29,6 +29,7 @@ Settings are read from `.env` in the project root (or the current directory, or 
 | `AGENT_EXCHANGE_DATA_DIR` | `~/.local/share/agent-exchange/conversations` | Where conversations are saved |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | – / `claude-opus-5-5` | Anthropic credentials and default model |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` / `OPENAI_BASE_URL` | – / `gpt-5` / OpenAI | OpenAI settings |
+| `AGENT_EXCHANGE_IGNORE_PROXY` | off | Set `true` to make API calls ignore `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY` (see Troubleshooting) |
 | `XAI_API_KEY` / `XAI_MODEL` / `XAI_BASE_URL` | – / `grok-4` / `https://api.x.ai/v1` | xAI settings |
 
 Provider selection is *not* configured here — it happens in the client (see below). `.env` only holds API keys, models and the data directory. You only need keys for the providers you use. Adjust the default OpenAI/xAI model IDs to whatever your account offers.
@@ -85,6 +86,12 @@ The provider is picked in your MCP client, not in config:
 ## Storage
 
 Conversations are stored as `<conversation_id>.json` (system prompt + message list) in the data directory. Files are plain text and contain your prompts and replies, so protect the directory accordingly. Delete a conversation with `reset_conversation` or by removing its file.
+
+## Troubleshooting
+
+- **`has_api_key: false`** — call `server_info` to see which `.env` files were checked. Sandboxed clients may not let the server read the project folder; set the keys in the client's environment-variable settings instead. Config is read at startup, so reconnect after changes.
+- **`Could not reach the <provider> API: Connection error`** — the client app may export proxy variables (`ALL_PROXY`, `HTTPS_PROXY`) that point at a proxy this process can't reach. `server_info` shows them under `proxy_env`. If the machine can reach the API directly, set `AGENT_EXCHANGE_IGNORE_PROXY=true`.
+- **`Using SOCKS proxy, but 'socksio' is not installed`** — reinstall (`pip install -e .`); `socksio` is a dependency.
 
 ## Notes
 

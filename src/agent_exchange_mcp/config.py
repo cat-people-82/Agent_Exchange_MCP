@@ -31,14 +31,22 @@ class Config:
     default_provider: str
     providers: dict[str, Provider]
     data_dir: Path
+    env_files: list[tuple[str, bool]]  # (.env path checked, found?)
 
 
 def load_config() -> Config:
     # Existing environment variables win over .env values (override=False).
     explicit = os.environ.get("AGENT_EXCHANGE_ENV_FILE")
-    load_dotenv(explicit or PROJECT_ROOT / ".env")
-    if not explicit:
-        load_dotenv(Path.cwd() / ".env")
+    candidates = [Path(explicit)] if explicit else [PROJECT_ROOT / ".env", Path.cwd() / ".env"]
+    env_files = []
+    for path in candidates:
+        try:
+            found = path.is_file()
+            if found:
+                load_dotenv(path)
+        except OSError:  # e.g. blocked by an app sandbox
+            found = False
+        env_files.append((str(path), found))
 
     providers = {}
     for name, spec in PROVIDERS.items():
@@ -57,4 +65,4 @@ def load_config() -> Config:
         os.environ.get("AGENT_EXCHANGE_DATA_DIR")
         or Path.home() / ".local" / "share" / "agent-exchange" / "conversations"
     ).expanduser()
-    return Config(default_provider=default, providers=providers, data_dir=data_dir)
+    return Config(default_provider=default, providers=providers, data_dir=data_dir, env_files=env_files)

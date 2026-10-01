@@ -120,6 +120,21 @@ def list_providers() -> list[dict]:
 
 
 @mcp.tool()
+def server_info() -> dict:
+    """Diagnose configuration: which .env files were checked, data dir, and key status."""
+    cfg = _cfg()
+    return {
+        "env_files_checked": [{"path": p, "found": f} for p, f in cfg.env_files],
+        "data_dir": str(cfg.data_dir),
+        "providers": {
+            n: {"has_api_key": bool(p.api_key), "key_variable": f"{n.upper()}_API_KEY"}
+            for n, p in cfg.providers.items()
+        },
+        "note": "Config is read once at startup; reconnect the server after editing .env.",
+    }
+
+
+@mcp.tool()
 def list_conversations() -> list[dict]:
     """List active conversations (id, turn count, system prompt)."""
     store = _conversations()

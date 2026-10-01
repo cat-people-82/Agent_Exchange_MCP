@@ -17,7 +17,8 @@ def complete(p: Provider, model: str, system: str | None, messages: Messages,
     if not p.api_key:
         raise ProviderError(
             f"No API key for provider '{p.name}'. Set {p.name.upper()}_API_KEY in "
-            "the .env file (or the client's env settings)."
+            "the .env file or the client's environment-variable settings, then reconnect "
+            "the server (config is read at startup). Call server_info to see where it looked."
         )
     if p.kind == "anthropic":
         return _anthropic(p, model, system, messages, max_tokens, effort)

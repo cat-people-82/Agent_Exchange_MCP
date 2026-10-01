@@ -65,6 +65,7 @@ Tips:
 |---|---|
 | `chat(message, conversation_id?, provider?, model?, system?, max_tokens?, effort?)` | Send a message and get the reply. Omit `conversation_id` to start a new conversation; pass the returned id to continue it. `system` applies only when starting a conversation. `effort` (`low`…`max`) applies to Anthropic only. |
 | `list_providers()` | Configured providers, default models, and whether a key is set. |
+| `server_info()` | Diagnose config: which `.env` files were checked/found, data dir, and which providers have a key. |
 | `list_conversations()` | Saved conversations (id, turns, system prompt). |
 | `reset_conversation(conversation_id)` | Delete a conversation. |
 

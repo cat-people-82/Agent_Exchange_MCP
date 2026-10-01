@@ -1,6 +1,9 @@
 """Thin wrappers that send a message history to a provider and return text."""
 
+import os
+
 import anthropic
+import certifi
 import openai
 
 from .config import Provider
@@ -12,14 +15,46 @@ class ProviderError(RuntimeError):
     pass
 
 
-def _anthropic_client(p: Provider, ignore_proxy: bool) -> anthropic.Anthropic:
+def _cause(exc: BaseException, depth: int = 4) -> str:
+    """Render an exception with its chained causes, for diagnosable errors."""
+    parts, seen = [], set()
+    e: BaseException | None = exc
+    while e is not None and len(parts) < depth and id(e) not in seen:
+        seen.add(id(e))
+        text = str(e).strip()
+        parts.append(f"{type(e).__name__}: {text}" if text else type(e).__name__)
+        e = e.__cause__ or e.__context__
+    return " <- ".join(parts)
+
+
+def _ca_bundle() -> str:
+    """CA bundle to verify TLS against.
+
+    The SDKs' default client verifies through the OS trust store (httpx 2.x uses
+    truststore, which on macOS calls the Security framework and can fail with a
+    bare OSStatus error even for a valid public certificate). Verifying against
+    certifi instead is deterministic and works for the public endpoints used here.
+    Set AGENT_EXCHANGE_CA_BUNDLE to use a different bundle, e.g. behind a TLS
+    terminating corporate proxy whose CA is not in certifi.
+    """
+    return os.environ.get("AGENT_EXCHANGE_CA_BUNDLE") or certifi.where()
+
+
+def _http_kwargs(ignore_proxy: bool) -> dict:
     # trust_env=False makes the HTTP client ignore ALL_PROXY/HTTPS_PROXY/etc.
-    http = anthropic.DefaultHttpxClient(trust_env=False) if ignore_proxy else None
+    kwargs: dict = {"verify": _ca_bundle()}
+    if ignore_proxy:
+        kwargs["trust_env"] = False
+    return kwargs
+
+
+def _anthropic_client(p: Provider, ignore_proxy: bool) -> anthropic.Anthropic:
+    http = anthropic.DefaultHttpxClient(**_http_kwargs(ignore_proxy))
     return anthropic.Anthropic(api_key=p.api_key, base_url=p.base_url, http_client=http)
 
 
 def _openai_client(p: Provider, ignore_proxy: bool) -> openai.OpenAI:
-    http = openai.DefaultHttpxClient(trust_env=False) if ignore_proxy else None
+    http = openai.DefaultHttpxClient(**_http_kwargs(ignore_proxy))
     return openai.OpenAI(api_key=p.api_key, base_url=p.base_url, http_client=http)
 
 
@@ -78,7 +113,9 @@ def _openai(p, model, system, messages, max_tokens, ignore_proxy) -> str:
     except openai.APIStatusError as e:
         raise ProviderError(f"{p.name} API error {e.status_code}: {e.message}")
     except openai.APIConnectionError as e:
-        raise ProviderError(f"Could not reach the {p.name} API: {e}")
+        # The SDK's own message is a bare "Connection error."; the useful detail
+        # (proxy refusal, DNS failure, TLS error) is on the chained cause.
+        raise ProviderError(f"Could not reach the {p.name} API: {_cause(e)}")
 
     choice = resp.choices[0]
     text = choice.message.content or ""

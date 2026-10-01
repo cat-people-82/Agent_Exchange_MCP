@@ -144,6 +144,7 @@ def server_info() -> dict:
             for n, p in cfg.providers.items()
         },
         "ignore_proxy": cfg.ignore_proxy,
+        "socks_fallback": cfg.socks_fallback,
         "proxy_env": _proxy_env(),
         "note": "Config is read once at startup; reconnect the server after editing .env.",
     }

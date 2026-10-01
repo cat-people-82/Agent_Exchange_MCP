@@ -92,6 +92,8 @@ Conversations are stored as `<conversation_id>.json` (system prompt + message li
 - **`has_api_key: false`** — call `server_info` to see which `.env` files were checked. Sandboxed clients may not let the server read the project folder; set the keys in the client's environment-variable settings instead. Config is read at startup, so reconnect after changes.
 - **`Could not reach the <provider> API: Connection error`** — the client app may export proxy variables (`ALL_PROXY`, `HTTPS_PROXY`) that point at a proxy this process can't reach. `server_info` shows them under `proxy_env`. If the machine can reach the API directly, set `AGENT_EXCHANGE_IGNORE_PROXY=true`.
 - **`Using SOCKS proxy, but 'socksio' is not installed`** — reinstall (`pip install -e .`); `socksio` is a dependency.
+- **`SSLCertVerificationError: ('OSStatus -26276',)`** (macOS) — the SDK default client verifies through the OS trust store (httpx 2.x uses `truststore`, which calls the Security framework) and that can fail even for a valid public certificate. Both client factories therefore verify against `certifi`; override with `AGENT_EXCHANGE_CA_BUNDLE` if you sit behind a TLS-terminating proxy whose CA is not in certifi.
+- **A sandboxed client may offer no direct egress.** If `AGENT_EXCHANGE_IGNORE_PROXY=true` produces `nodename nor servname provided`, the proxy is the only route out — leave the flag off. Where `ALL_PROXY` is SOCKS but only the HTTP proxy serves, the server rewrites the catch-all to the HTTP proxy at startup and reports it as `socks_fallback` in `server_info`; disable with `AGENT_EXCHANGE_SOCKS_FALLBACK=false`.
 
 ## Notes
 
